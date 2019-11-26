@@ -1,0 +1,97 @@
+%YAML:1.0
+strings:
+   - "image1.jpg"
+   - Awesomeness
+   - "baboon.jpg"
+
+input_addres: "ipc"
+output_addres: "ipc"
+
+pid_path: "/tmp/disparity_calculator.pid"
+
+is_calibration_classic: 1
+is_frames_jpeg: 1
+left_channel: "LZcmCameraBaslerJpegFrame"
+right_channel: "RZcmCameraBaslerJpegFrame"
+railway_channel: "LRailDetection"
+stereo_points_channel: "StereoPoints"
+stereo_clusters_channel: "StereoClusters"
+disparity_channel: ""
+points_channel: ""
+clusters_channel: ""
+hardware_binning: 1
+software_binning: 2
+
+width: 2048
+height: 1536
+
+mtxL: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 3.57578167e+03, 0.00000000e+00, 1.06747275e+03,
+           0.00000000e+00, 3.56882651e+03, 7.61048149e+02,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00 ]
+mtxR: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 3.56975467e+03, 0.00000000e+00, 1.03140354e+03,
+           0.00000000e+00, 3.56308585e+03, 6.42199341e+02,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00 ]
+distL: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -4.76612063e-02, -1.38363362e+00, 3.14893257e-03, -1.64810509e-03, 1.67807363e+01 ]
+distR: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -5.81680470e-02, -7.60133973e-01, -2.78324237e-03, -1.50492871e-03, 7.73166601e+00 ]
+rectifyL: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 0.9999586,  -0.00370672, 0.0083106,
+           0.0036388,   0.99995998, 0.00817272,
+          -0.00834056, -0.00814214, 0.99993207 ]
+rectifyR: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 9.99974315e-01, -7.11889067e-03,  8.30747933e-04,
+           7.12543068e-03,  9.99941364e-01, -8.15460719e-03,
+          -7.72647464e-04,  8.16031718e-03,  9.99966406e-01 ]
+projectL: !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [ 3.56595618e+03, 0.00000000e+00, 1.02916381e+03, 0.00000000e+00,
+           0.00000000e+00, 3.56595618e+03, 7.02474052e+02, 0.00000000e+00,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00, 0.00000000e+00 ]
+projectR: !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [ 3.56595618e+03, 0.00000000e+00, 1.02916381e+03, -7.09050406e+03,
+           0.00000000e+00, 3.56595618e+03, 7.02474052e+02,  0.00000000e+00,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00,  0.00000000e+00 ]
+Q: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 1.00000000e+00, 0.00000000e+00, 0.00000000e+00, -1.02916381e+03,
+           0.00000000e+00, 1.00000000e+00, 0.00000000e+00, -7.02474052e+02,
+           0.00000000e+00, 0.00000000e+00, 0.00000000e+00,  3.56595618e+03,
+           0.00000000e+00, 0.00000000e+00, 5.02919983e-01, -0.00000000e+00 ]
+
+minDisp: 0
+maxDisp: 96
+blockSize: 21
+preFilterCap: 1
+P1: 96
+P2: 2048
+speckleRange: 20
+speckleWindowSize: 2048
+

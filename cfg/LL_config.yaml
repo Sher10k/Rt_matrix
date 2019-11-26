@@ -1,0 +1,97 @@
+%YAML:1.0
+input_addres: "ipc"
+output_addres: "ipc"
+
+pid_path: "/tmp/disparity_calculator.pid"
+
+is_calibration_classic: 1
+is_frames_jpeg: 1
+left_channel: "LLZcmCameraBaslerJpegFrame"
+right_channel: "LRZcmCameraBaslerJpegFrame"
+railway_channel: "RailsSegmentationLong"
+stereo_points_channel: "StereoPoints"
+stereo_clusters_channel: "StereoClusters"
+from_odu_channel: "from_odu_long"
+disparity_channel: ""
+points_channel: ""
+clusters_channel: ""
+
+hardware_binning: 1
+software_binning: 2
+
+width: 2048
+height: 1084
+
+red_zone: 1.56
+yellow_zone: 3.12
+
+# stereo params
+minDisp: 0
+maxDisp: 128
+blockSize: 5
+preFilterCap: 37
+P1: 296
+P2: 2048
+speckleRange: 22
+speckleWindowSize: 2048
+
+mtxL: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 8.00862562e+03, 0.00000000e+00, 1.02400000e+03,
+           0.00000000e+00, 8.02450288e+03, 5.42000000e+02,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00]
+mtxR: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 7.94375427e+03, 0.00000000e+00, 1.02400000e+03,
+           0.00000000e+00, 7.96749729e+03, 5.42000000e+02,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00]
+distL: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ 1.63805709e-01, -1.70646245e+01,  0.00000000e+00,  0.00000000e+00,  8.02539624e+02 ]
+distR: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ 0.22854696,  -6.13996157,   0.,           0.,         -87.83930307 ]
+rectifyL: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 9.99644638e-01, -2.45829580e-02, -1.03090640e-02,
+           2.45786727e-02,  9.99697752e-01, -5.42191669e-04,
+           1.03192768e-02,  2.88615883e-04,  9.99946713e-01]
+rectifyR: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 9.99782760e-01,  1.09398502e-02,  1.77412485e-02,
+          -1.09472201e-02,  9.99940027e-01,  3.18344026e-04,
+          -1.77367019e-02, -5.12492220e-04,  9.99842561e-01]
+projectL: !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [ 7.99600009e+03, 0.00000000e+00, 9.93771111e+02, 0.00000000e+00,
+           0.00000000e+00, 7.99600009e+03, 5.42919964e+02, 0.00000000e+00,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00, 0.00000000e+00 ]
+projectR: !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [ 7.99600009e+03,  0.00000000e+00,  9.93771111e+02, -7.05228929e+04,
+           0.00000000e+00,  7.99600009e+03,  5.42919964e+02,  0.00000000e+00,
+           0.00000000e+00,  0.00000000e+00,  1.00000000e+00,  0.00000000e+00]
+Q: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 1.00000000e+00,  0.00000000e+00,  0.00000000e+00, -9.93771111e+02,
+           0.00000000e+00,  1.00000000e+00,  0.00000000e+00, -5.42919964e+02,
+           0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  7.99600009e+03,
+           0.00000000e+00,  0.00000000e+00,  1.13381623e-01, -0.00000000e+00]

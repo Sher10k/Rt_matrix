@@ -1,0 +1,86 @@
+%YAML:1.0
+input_addres: "ipc"
+output_addres: "ipc"
+
+pid_path: "/tmp/disparity_calculator.pid"
+
+is_calibration_classic: 1
+is_frames_jpeg: 1
+left_channel: "SLZcmCameraBaslerJpegFrame"
+right_channel: "SRZcmCameraBaslerJpegFrame"
+railway_channel: "RailsSegmentation"
+stereo_points_channel: "StereoPoints"
+stereo_clusters_channel: "StereoClusters"
+disparity_channel: ""
+points_channel: ""
+clusters_channel: ""
+
+hardware_binning: 1
+software_binning: 2
+
+width: 2048
+height: 1084
+
+red_zone: 1.86
+yellow_zone: 5.0
+
+mtxL: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 1.84532249e+03,  0.00000000e+00,  1.02999724e+03,
+           0.00000000e+00,  1.84910214e+03,  5.75617825e+02,
+           0.00000000e+00,  0.00000000e+00,  1.00000000e+00]
+mtxR: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 1.85706242e+03, 0.00000000e+00, 1.04228698e+03,
+           0.00000000e+00, 1.86338975e+03, 5.79684822e+02,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00]
+distL: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -0.03465242, -0.10489374,  0.00143503, 0.00551782,  0.50107299 ]
+distR: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ -0.04878676,  0.00483258,  0.0056322,   0.00377702,  0.38261656 ]
+rectifyL: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [  0.94034782,  0.01058628,  0.34004985,
+           -0.00902497,  0.99994022, -0.00617272,
+           -0.34009487,  0.00273556,  0.94038715]
+rectifyR: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 0.94447279,  0.00891149,  0.32846876,
+          -0.01041782,  0.99994174,  0.00282638,
+          -0.32842443, -0.00609137,  0.94451061]
+projectL: !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [ 1.85624595e+03, 0.00000000e+00, 1.55248352e+02, 0.00000000e+00,
+           0.00000000e+00, 1.85624595e+03, 5.89230270e+02, 0.00000000e+00,
+           0.00000000e+00, 0.00000000e+00, 1.00000000e+00, 0.00000000e+00 ]
+projectR: !!opencv-matrix
+   rows: 3
+   cols: 4
+   dt: d
+   data: [ 1.85624595e+03,  0.00000000e+00,  1.55248352e+02, -3.17303172e+03,
+           0.00000000e+00,  1.85624595e+03,  5.89230270e+02,  0.00000000e+00,
+           0.00000000e+00,  0.00000000e+00,  1.00000000e+00,  0.00000000e+00]
+Q: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [ 1.00000000e+00,  0.00000000e+00,  0.00000000e+00, -1.55248352e+02,
+           0.00000000e+00,  1.00000000e+00,  0.00000000e+00, -5.89230270e+02,
+           0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  1.85624595e+03,
+           0.00000000e+00,  0.00000000e+00,  5.85007057e-01, -0.00000000e+00]

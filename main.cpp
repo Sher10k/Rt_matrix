@@ -186,7 +186,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     fs["speckleRange"] >> stereo_params.speckleRange;
     fs["speckleWindowSize"] >> stereo_params.speckleWindowSize;
     
-    cv::Ptr<cv::StereoSGBM> bm;
+    cv::Ptr< cv::StereoSGBM > bm;
     bm = cv::StereoSGBM::create(stereo_params.minDisp, stereo_params.maxDisp, stereo_params.blockSize);
     bm->setPreFilterCap(stereo_params.preFilterCap);
     bm->setP1(stereo_params.P1);
@@ -197,8 +197,10 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     
     
     // Read zcm file
-    string zcm_file = "../zcm_logs/534_train_1911210018.zcm.1"; 
-                      //"../zcm_logs/534_train_1911210018.zcm.0"; 
+    string zcm_file = "../zcm_logs/534_train_1911230727.zcm.1";
+                      //"../zcm_logs/534_train_1911230135.zcm.0"
+                      //"../zcm_logs/534_train_1911210018.zcm.1"; 
+                      "../zcm_logs/534_train_1911210018.zcm.0"; 
                       //"/home/roman/videos/data/534_loco/zcm_files/20191121/534_train_1911210018.zcm.1";
     // Open zcm log
     LogFile *zcm_log;
@@ -449,6 +451,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
         std::cout << "\t" << i << std::endl;
     
     fs.release();
+    
     
     return 0;    
     
