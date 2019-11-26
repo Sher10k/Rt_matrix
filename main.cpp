@@ -173,17 +173,8 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     fs["width"] >> width;
     fs["hardware_binning"] >> hardware_binning;
     fs["software_binning"] >> software_binning;
-
     std::cout << "Q matrix:\n" << Q << "\n";
 
-    zcm::ZCM zcm_in { input_addres.c_str() };
-    zcm::ZCM zcm_out { output_addres.c_str() };
-
-    if (!(zcm_in.good() and zcm_out.good()))
-    {
-        std::cout << "Zcm.good return false";
-        return 1;
-    }
         // PARAMETERS FOR STEREO (DISP IMG)
     Handler::StereoParams stereo_params;
     fs["minDisp"] >> stereo_params.minDisp;
@@ -194,6 +185,296 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     fs["P2"] >> stereo_params.P2;
     fs["speckleRange"] >> stereo_params.speckleRange;
     fs["speckleWindowSize"] >> stereo_params.speckleWindowSize;
+    
+    cv::Ptr<cv::StereoSGBM> bm;
+    bm = cv::StereoSGBM::create(stereo_params.minDisp, stereo_params.maxDisp, stereo_params.blockSize);
+    bm->setPreFilterCap(stereo_params.preFilterCap);
+    bm->setP1(stereo_params.P1);
+    bm->setP2(stereo_params.P2);
+    bm->setMode(cv::StereoSGBM::MODE_SGBM_3WAY);
+    bm->setSpeckleRange(stereo_params.speckleRange);
+    bm->setSpeckleWindowSize(stereo_params.speckleWindowSize);
+    
+    
+    // Read zcm file
+    string zcm_file = "../zcm_logs/534_train_1911210018.zcm.1"; 
+                      //"../zcm_logs/534_train_1911210018.zcm.0"; 
+                      //"/home/roman/videos/data/534_loco/zcm_files/20191121/534_train_1911210018.zcm.1";
+    // Open zcm log
+    LogFile *zcm_log;
+    zcm_log = new LogFile( zcm_file, "r" );
+    if ( !zcm_log->good() )
+    {
+    cout << "Bad zcm log: " << zcm_file << endl;
+    exit(0);
+    }
+    
+    // --- START ---------- //
+    Mat imgL, imgR, railway_mask;
+    std::set < std::string > zcm_list;
+    //int num_point = 1;
+    bool view = false;
+    RNG rng(12345);
+    cv::Size binning_size = { int(width / software_binning), 
+                              int(height / software_binning) };
+    cv::Size origin_size = { int(width), 
+                             int(height) };
+    int64_t last_left_ts = 0;
+    int64_t last_right_ts = 0;
+    int64_t last_railway_ts = 0;
+    
+    long time_samp = 0;                                                     // Global time stemp
+    bool Lflag = false, Rflag = false, Railflag = false; 
+    
+    cv::Mat leftMapX, leftMapY;
+    cv::Mat rightMapX, rightMapY;
+    cv::initUndistortRectifyMap(
+         mtxL, distL, rectifyL, projectL,
+        {width, height}, CV_32FC1, leftMapX, leftMapY
+    );
+    cv::initUndistortRectifyMap(
+         mtxR, distR, rectifyR, projectR,
+        {width, height}, CV_32FC1, rightMapX, rightMapY
+    );
+//    resize( leftMapX, leftMapX, binning_size, 0, 0, cv::INTER_LINEAR );
+//    resize( leftMapY, leftMapY, binning_size, 0, 0, cv::INTER_LINEAR );
+//    resize( rightMapX, rightMapX, binning_size, 0, 0, cv::INTER_LINEAR );
+//    resize( rightMapY, rightMapY, binning_size, 0, 0, cv::INTER_LINEAR );
+//    leftMapX /= software_binning;
+//    leftMapY /= software_binning;
+//    rightMapX /= software_binning;
+//    rightMapY /= software_binning;
+    
+    shared_ptr< geometry::PointCloud > Cloud ( new geometry::PointCloud );  // Global cloud 3D points
+    
+        // Visualization
+    visualization::Visualizer vis;
+    vis.CreateVisualizerWindow( "Open3D_odometry", 1600, 900, 50, 50 );
+        // Add Coordinate
+    auto coord = geometry::TriangleMesh::CreateCoordinateFrame( 1.0, Vector3d( 0.0, 0.0, 0.0 ) );
+    coord->ComputeVertexNormals();
+    vis.AddGeometry( coord );
+        // Grid
+    PaintGrid( vis, 150.0, 1.0 );
+        // Add Lidar
+    vis.AddGeometry( Cloud );
+    
+    while(1)
+    {
+        int click = 0;
+        const zcm::LogEvent* event = zcm_log->readNextEvent();
+        if ( !event ) break;
+            zcm_list.insert( event->channel );
+        
+            // Frame from camera
+        long tts = 0;                                           // Local time stemp
+        if ( event->channel == "LZcmCameraBaslerJpegFrame" )
+        {
+//            ZcmSauglState zcm_rev;
+//            cout << "Revers: " << zcm_rev.reversor << endl;
+            ZcmCameraBaslerJpegFrame zcm_msg; 
+            zcm_msg.decode( event->data, 0, static_cast< unsigned >( event->datalen ) );
+            imgL = imdecode( zcm_msg.jpeg, IMREAD_COLOR );
+            
+            Mat imgTemp;
+            resize( imgL, imgL, origin_size, 0, 0, cv::INTER_LINEAR );
+            resize( imgL, imgTemp, binning_size, 0, 0, cv::INTER_LINEAR );
+            
+            tts = zcm_msg.service.u_timestamp;
+            last_left_ts = tts;
+            cout << " --- L:\t" << tts << endl;
+            imshow( "imgL", imgTemp );
+            click = waitKey(50);
+            
+            Lflag = true;
+            if ( abs(last_left_ts - last_right_ts) > 100 ) 
+            {
+                time_samp = tts;
+                Rflag = false;
+            }
+        }
+        else if ( event->channel == "RZcmCameraBaslerJpegFrame" )
+        {
+            ZcmCameraBaslerJpegFrame zcm_msg; 
+            zcm_msg.decode( event->data, 0, static_cast< unsigned >( event->datalen ) );
+            imgR = imdecode( zcm_msg.jpeg, IMREAD_COLOR );
+            
+            Mat imgTemp;
+            resize( imgR, imgR, origin_size, 0, 0, cv::INTER_LINEAR );
+            resize( imgR, imgTemp, binning_size, 0, 0, cv::INTER_LINEAR );
+            
+            tts = zcm_msg.service.u_timestamp;
+            last_right_ts = tts;
+            cout << " --- R:\t" << tts << endl;
+            imshow( "imgR", imgTemp );
+            click = waitKey(30);
+            
+            Rflag = true;
+            if ( abs(last_left_ts - last_right_ts) > 100 ) // time_samp != tts
+            {
+                time_samp = tts;
+                Lflag = false;
+            }
+        }
+        else if ( event->channel == "LRailDetection" )
+        {
+            ZcmRailDetectorMask zcm_msg;
+            zcm_msg.decode( event->data, 0, static_cast< unsigned >( event->datalen  ) );
+//            std::vector< char > jpeg_buf;
+//            jpeg_buf.assign( zcm_msg.mask.data(), 
+//                             zcm_msg.mask.data() + zcm_msg.mask.size() );
+//            railway_mask = cv::imdecode( jpeg_buf, cv::IMREAD_GRAYSCALE );
+            railway_mask = cv::imdecode( zcm_msg.mask, cv::IMREAD_GRAYSCALE );
+            
+            Mat imgTemp;
+            resize( railway_mask, railway_mask, origin_size, 0, 0, cv::INTER_LINEAR );
+            resize( railway_mask, imgTemp, binning_size, 0, 0, cv::INTER_LINEAR );
+            
+            cv::blur(railway_mask, railway_mask, {5, 5});
+            cv::inRange(railway_mask, 15, 255, railway_mask);
+            
+            last_railway_ts = zcm_msg.service.u_timestamp;
+            //cout << " --- LRailDetection:\t\t" << last_railway_ts << endl;
+            imshow( "railway_channel", imgTemp );
+            click = waitKey(30);
+        }
+        
+        
+        
+            // If finded two same frame-time, make depth map
+        if( Lflag && Rflag )
+        {
+            cout << "Pair same frames found \n" << endl;
+            Lflag = false;
+            Rflag = false;
+            
+            
+                // Undistort & rectify
+            cv::Mat imgRemap[2];
+//            for ( int i = 0; i < 2; i++ )
+//                remap( img[i], imgRemap[i], 
+//                       rmap[i][0], rmap[i][1], 
+//                       INTER_LINEAR );
+            cv::remap(
+                imgL, imgRemap[0],
+                leftMapX, leftMapY, cv::INTER_LINEAR);
+            cv::remap(
+                imgR, imgRemap[1],
+                rightMapX, rightMapY, cv::INTER_LINEAR);
+
+            
+            Mat imgGrey[2]; 
+            cvtColor( imgRemap[0], imgGrey[0], COLOR_BGR2GRAY);
+            cvtColor( imgRemap[1], imgGrey[1], COLOR_BGR2GRAY);
+//            imshow( "iRL", imgRemap[0] );
+//            imshow( "iRR", imgRemap[1] );
+//            imshow( "GL", imgGrey[0] );
+//            imshow( "GR", imgGrey[1] );
+//            click = waitKey(0);
+            
+            Mat frameLR = Mat::zeros(Size(2 * width, height), CV_8UC3);
+            Rect r1(0, 0, width, height);
+            Rect r2(width, 0, width, height);
+            putText( imgRemap[0], "L", Point(5, 140), FONT_HERSHEY_SIMPLEX, 5, Scalar(255, 0, 0), 10);
+            putText( imgRemap[1], "R", Point(5, 140), FONT_HERSHEY_SIMPLEX, 5, Scalar(255, 0, 0), 10);
+            imgRemap[0].copyTo(frameLR( r1 ));
+            imgRemap[1].copyTo(frameLR( r2 ));
+            for( int i = 0; i < frameLR.rows; i += 100 )
+                for( int j = 0; j < frameLR.cols; j++ )
+                    frameLR.at< Vec3b >(i, j)[2] = 255;
+            resize( frameLR, frameLR, Size(2 * binning_size.width, binning_size.height), 0, 0, cv::INTER_LINEAR );
+            imshow( "LR", frameLR );
+            //waitKey(0);
+            
+            
+                // Calculate disparity
+            cv::Mat disparity;
+            bm->compute( imgGrey[0], imgGrey[1], disparity );
+    
+            float coef = imgL.size().width/disparity.size().width;
+            std::cout << "Disparity coefficient: " << coef << "\n";
+            
+            cv::Mat disparity_viz;
+            disparity.convertTo( disparity_viz, CV_8U, 255/(96*16.0) );
+            //if ( !disparity_masking.empty() ) disparity_masking.convertTo( disparity_viz, CV_8U, 255/(96*16.0) );
+            cv::applyColorMap( disparity_viz, disparity_viz, cv::COLORMAP_HSV );
+            resize( disparity_viz, disparity_viz, binning_size, 0, 0, cv::INTER_LINEAR );
+            cv::imshow("disp", disparity_viz);
+            
+//                // Nomalization
+//            double minVal; double maxVal;
+//            minMaxLoc( disparity, &minVal, &maxVal );
+//            Mat imgDispNorm;
+//            disparity.convertTo( imgDispNorm, CV_8UC1, 255/(maxVal - minVal) );
+//            Mat imgDisp_color;
+//            applyColorMap( imgDispNorm, imgDisp_color, COLORMAP_RAINBOW );   // COLORMAP_HOT
+//            resize( imgDisp_color, imgDisp_color, binning_size, 0, 0, cv::INTER_LINEAR );
+//            imshow( "Disparity", imgDisp_color );
+            
+                // 3D points with mask
+            Mat points3D, disparity_masking;
+            disparity.convertTo( disparity, CV_32F );
+            disparity.copyTo( disparity_masking, railway_mask );
+            reprojectImageTo3D( disparity_masking, points3D, Q, 3 ); 
+            
+                // 3D point
+            Cloud->Clear();
+            for ( size_t i = 0; i < points3D.total(); i ++ )
+            {
+                Vector3d temPoint, tempColor;
+                temPoint << double( points3D.at< Vec3f >( static_cast<int>(i) )[0] ),
+                            double( points3D.at< Vec3f >( static_cast<int>(i) )[1] ),
+                            double( points3D.at< Vec3f >( static_cast<int>(i) )[2] );
+                tempColor.x() = double( imgRemap[0].at< Vec3b >(int(i)).val[2] / 255.0 );
+                tempColor.y() = double( imgRemap[0].at< Vec3b >(int(i)).val[1] / 255.0 );
+                tempColor.z() = double( imgRemap[0].at< Vec3b >(int(i)).val[0] / 255.0 );
+                Cloud->points_.push_back( temPoint );
+                Cloud->colors_.push_back( tempColor );
+            }
+            waitKey(50);
+            
+            vis.UpdateGeometry();
+            //vis.PollEvents();
+            vis.Run();
+            click = waitKey(0);
+        }
+        if ( click == 'v' || click == 'V' ) view = true;
+        else if ( click == 27 || click == 'q' || click == 'Q' ) break;                                // Interrupt the cycle, press "ESC"
+        
+    }
+    
+        // Output list zcm parameters
+    std::cout << "zcm_list: " << std::endl;
+    for(auto i : zcm_list)
+        std::cout << "\t" << i << std::endl;
+    
+    fs.release();
+    
+    return 0;    
+    
+    
+    
+    
+    // Start zcm logplayer
+    
+/*    zcm::ZCM zcm_in { input_addres.c_str() };
+    zcm::ZCM zcm_out { output_addres.c_str() };
+
+    if (!(zcm_in.good() and zcm_out.good()))
+    {
+        std::cout << "Zcm.good return false";
+        return 1;
+    }
+//        // PARAMETERS FOR STEREO (DISP IMG)
+//    Handler::StereoParams stereo_params;
+//    fs["minDisp"] >> stereo_params.minDisp;
+//    fs["maxDisp"] >> stereo_params.maxDisp;
+//    fs["blockSize"] >> stereo_params.blockSize;
+//    fs["preFilterCap"] >> stereo_params.preFilterCap;
+//    fs["P1"] >> stereo_params.P1;
+//    fs["P2"] >> stereo_params.P2;
+//    fs["speckleRange"] >> stereo_params.speckleRange;
+//    fs["speckleWindowSize"] >> stereo_params.speckleWindowSize;
     
     Handler handlerObject(
         left_channel, right_channel, railway_channel,
@@ -264,7 +545,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     zcm_in.run();
     
     
-    return 0;
+    return 0;*/
 }
 
 

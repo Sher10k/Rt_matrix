@@ -170,9 +170,11 @@ public:
         // coef = 1;
         std::cout << "Disparity coefficient: " << coef << "\n";
         
-            // 3D points
+            // 3D points with mask
+        cv::Mat disparity_masking;
         disparity.convertTo( disparity, CV_32F );
-        cv::reprojectImageTo3D( disparity, XYZ, Q, 3 );
+        if ( !last_railway_mask.empty() ) disparity.copyTo( disparity_masking, last_railway_mask);
+        cv::reprojectImageTo3D( disparity_masking, XYZ, Q, 3 );
         std::cout << "XYZ size: " << XYZ.size() << std::endl;
 
         
@@ -180,6 +182,7 @@ public:
         #ifdef DEBUG
             cv::Mat disparity_viz;
             disparity.convertTo( disparity_viz, CV_8U, 255/(96*16.0) );
+            if ( !disparity_masking.empty() ) disparity_masking.convertTo( disparity_viz, CV_8U, 255/(96*16.0) );
             cv::applyColorMap( disparity_viz, disparity_viz, cv::COLORMAP_HSV );
             cv::imshow("disp", disparity_viz);
             cv::waitKey(10);
@@ -251,7 +254,8 @@ public:
             
             vis->UpdateGeometry();
         }
-        vis->PollEvents();
+        //vis->PollEvents();
+        vis->Run();
     }
     
     
