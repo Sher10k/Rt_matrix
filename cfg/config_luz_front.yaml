@@ -87,7 +87,7 @@ Q: !!opencv-matrix
            0.00000000e+00, 0.00000000e+00, 5.02919983e-01, -0.00000000e+00 ]
 
 minDisp: 0
-maxDisp: 96
+maxDisp: 256
 blockSize: 21
 preFilterCap: 1
 P1: 96

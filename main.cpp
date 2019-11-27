@@ -200,7 +200,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     string zcm_file = "../zcm_logs/534_train_1911230727.zcm.1";
                       //"../zcm_logs/534_train_1911230135.zcm.0"
                       //"../zcm_logs/534_train_1911210018.zcm.1"; 
-                      "../zcm_logs/534_train_1911210018.zcm.0"; 
+                      //"../zcm_logs/534_train_1911210018.zcm.0"; 
                       //"/home/roman/videos/data/534_loco/zcm_files/20191121/534_train_1911210018.zcm.1";
     // Open zcm log
     LogFile *zcm_log;
@@ -226,7 +226,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     int64_t last_railway_ts = 0;
     
     long time_samp = 0;                                                     // Global time stemp
-    bool Lflag = false, Rflag = false, Railflag = false; 
+    bool Lflag = false, Rflag = false, Dflag = false; 
     
     cv::Mat leftMapX, leftMapY;
     cv::Mat rightMapX, rightMapY;
@@ -238,6 +238,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
          mtxR, distR, rectifyR, projectR,
         {width, height}, CV_32FC1, rightMapX, rightMapY
     );
+        // For binning size
 //    resize( leftMapX, leftMapX, binning_size, 0, 0, cv::INTER_LINEAR );
 //    resize( leftMapY, leftMapY, binning_size, 0, 0, cv::INTER_LINEAR );
 //    resize( rightMapX, rightMapX, binning_size, 0, 0, cv::INTER_LINEAR );
@@ -270,6 +271,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
         
             // Frame from camera
         long tts = 0;                                           // Local time stemp
+        std::vector< cv::Point2i > center_line;                 // Points of center line
         if ( event->channel == "LZcmCameraBaslerJpegFrame" )
         {
 //            ZcmSauglState zcm_rev;
@@ -284,7 +286,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             
             tts = zcm_msg.service.u_timestamp;
             last_left_ts = tts;
-            cout << " --- L:\t" << tts << endl;
+            cout << " --- L:\t" << last_left_ts << endl;
             imshow( "imgL", imgTemp );
             click = waitKey(50);
             
@@ -293,6 +295,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             {
                 time_samp = tts;
                 Rflag = false;
+                Dflag = false;
             }
         }
         else if ( event->channel == "RZcmCameraBaslerJpegFrame" )
@@ -307,7 +310,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             
             tts = zcm_msg.service.u_timestamp;
             last_right_ts = tts;
-            cout << " --- R:\t" << tts << endl;
+            cout << " --- R:\t" << last_right_ts << endl;
             imshow( "imgR", imgTemp );
             click = waitKey(30);
             
@@ -316,6 +319,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             {
                 time_samp = tts;
                 Lflag = false;
+                Dflag = false;
             }
         }
         else if ( event->channel == "LRailDetection" )
@@ -328,28 +332,65 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
 //            railway_mask = cv::imdecode( jpeg_buf, cv::IMREAD_GRAYSCALE );
             railway_mask = cv::imdecode( zcm_msg.mask, cv::IMREAD_GRAYSCALE );
             
-            Mat imgTemp;
+                // Blur for smooth noize 
             resize( railway_mask, railway_mask, origin_size, 0, 0, cv::INTER_LINEAR );
-            resize( railway_mask, imgTemp, binning_size, 0, 0, cv::INTER_LINEAR );
-            
-            cv::blur(railway_mask, railway_mask, {5, 5});
+            cv::blur(railway_mask, railway_mask, {7, 7});
             cv::inRange(railway_mask, 15, 255, railway_mask);
+                // Boundary points of Red & yellow zones with step 10 vertically
+            center_line.clear();
+            //center_line.push_back({});
+            for (int y = 0; y < railway_mask.rows; y += 1)
+            {
+                int min_x = railway_mask.cols;
+                int max_x = 0;
+                
+                for (int x = 10; x < railway_mask.cols-10; x++ )
+                {
+                    if (railway_mask.at< uint8_t >(y, x) > 15)
+                    {
+                        if (min_x > x)  min_x = x;
+                        if (max_x < x) max_x = x;
+                    }
+                }
+                if (min_x < max_x)
+                {
+                    int center_x = (max_x + min_x) / 2;
+                    center_line.push_back( {center_x, y} );
+                }
+            }
+            Mat imgTemp;
+            railway_mask.copyTo( imgTemp );
+            cvtColor( imgTemp, imgTemp, cv::COLOR_GRAY2BGR );
+            for ( size_t i = 0; i < center_line.size(); i++ )
+            {
+                imgTemp.at< Vec3b >(center_line.at(i)) = Vec3b(0, 0, 255);
+            }
+            resize( imgTemp, imgTemp, binning_size, 0, 0, cv::INTER_LINEAR );
             
-            last_railway_ts = zcm_msg.service.u_timestamp;
-            //cout << " --- LRailDetection:\t\t" << last_railway_ts << endl;
+            tts = zcm_msg.service.u_timestamp;
+            last_railway_ts = tts;
+            cout << " --- D:\t" << last_railway_ts << endl;
             imshow( "railway_channel", imgTemp );
             click = waitKey(30);
+            
+            Dflag = true;
+            if ( (abs(last_left_ts - last_railway_ts) > 100) || (abs(last_right_ts - last_railway_ts) > 100) )
+            {
+                time_samp = tts;
+                Lflag = false;
+                Rflag = false;
+            }
         }
         
         
         
             // If finded two same frame-time, make depth map
-        if( Lflag && Rflag )
+        if( Lflag && Rflag && Dflag )
         {
             cout << "Pair same frames found \n" << endl;
             Lflag = false;
             Rflag = false;
-            
+            Dflag = false;
             
                 // Undistort & rectify
             cv::Mat imgRemap[2];
@@ -363,6 +404,9 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             cv::remap(
                 imgR, imgRemap[1],
                 rightMapX, rightMapY, cv::INTER_LINEAR);
+            cv::remap(
+                railway_mask, railway_mask,
+                leftMapX, leftMapY, cv::INTER_LINEAR);
 
             
             Mat imgGrey[2]; 
@@ -370,77 +414,81 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             cvtColor( imgRemap[1], imgGrey[1], COLOR_BGR2GRAY);
 //            imshow( "iRL", imgRemap[0] );
 //            imshow( "iRR", imgRemap[1] );
+//            imshow( "iD", railway_mask );
 //            imshow( "GL", imgGrey[0] );
 //            imshow( "GR", imgGrey[1] );
-//            click = waitKey(0);
             
-            Mat frameLR = Mat::zeros(Size(2 * width, height), CV_8UC3);
-            Rect r1(0, 0, width, height);
-            Rect r2(width, 0, width, height);
-            putText( imgRemap[0], "L", Point(5, 140), FONT_HERSHEY_SIMPLEX, 5, Scalar(255, 0, 0), 10);
-            putText( imgRemap[1], "R", Point(5, 140), FONT_HERSHEY_SIMPLEX, 5, Scalar(255, 0, 0), 10);
-            imgRemap[0].copyTo(frameLR( r1 ));
-            imgRemap[1].copyTo(frameLR( r2 ));
-            for( int i = 0; i < frameLR.rows; i += 100 )
-                for( int j = 0; j < frameLR.cols; j++ )
-                    frameLR.at< Vec3b >(i, j)[2] = 255;
-            resize( frameLR, frameLR, Size(2 * binning_size.width, binning_size.height), 0, 0, cv::INTER_LINEAR );
-            imshow( "LR", frameLR );
-            //waitKey(0);
+                // Viewer epipolar line
+//            Mat frameLR = Mat::zeros(Size(2 * width, height), CV_8UC3);
+//            Rect r1(0, 0, width, height);
+//            Rect r2(width, 0, width, height);
+//            putText( imgRemap[0], "L", Point(5, 140), FONT_HERSHEY_SIMPLEX, 5, Scalar(255, 0, 0), 10);
+//            putText( imgRemap[1], "R", Point(5, 140), FONT_HERSHEY_SIMPLEX, 5, Scalar(255, 0, 0), 10);
+//            imgRemap[0].copyTo(frameLR( r1 ));
+//            imgRemap[1].copyTo(frameLR( r2 ));
+//            for( int i = 0; i < frameLR.rows; i += 100 )
+//                for( int j = 0; j < frameLR.cols; j++ )
+//                    frameLR.at< Vec3b >(i, j)[2] = 255;
+//            resize( frameLR, frameLR, Size(2 * binning_size.width, binning_size.height), 0, 0, cv::INTER_LINEAR );
+//            imshow( "LR", frameLR );
             
             
                 // Calculate disparity
             cv::Mat disparity;
             bm->compute( imgGrey[0], imgGrey[1], disparity );
-    
             float coef = imgL.size().width/disparity.size().width;
             std::cout << "Disparity coefficient: " << coef << "\n";
             
+                // Viewer desparity image
             cv::Mat disparity_viz;
             disparity.convertTo( disparity_viz, CV_8U, 255/(96*16.0) );
-            //if ( !disparity_masking.empty() ) disparity_masking.convertTo( disparity_viz, CV_8U, 255/(96*16.0) );
             cv::applyColorMap( disparity_viz, disparity_viz, cv::COLORMAP_HSV );
             resize( disparity_viz, disparity_viz, binning_size, 0, 0, cv::INTER_LINEAR );
             cv::imshow("disp", disparity_viz);
             
-//                // Nomalization
-//            double minVal; double maxVal;
-//            minMaxLoc( disparity, &minVal, &maxVal );
-//            Mat imgDispNorm;
-//            disparity.convertTo( imgDispNorm, CV_8UC1, 255/(maxVal - minVal) );
-//            Mat imgDisp_color;
-//            applyColorMap( imgDispNorm, imgDisp_color, COLORMAP_RAINBOW );   // COLORMAP_HOT
-//            resize( imgDisp_color, imgDisp_color, binning_size, 0, 0, cv::INTER_LINEAR );
-//            imshow( "Disparity", imgDisp_color );
-            
                 // 3D points with mask
             Mat points3D, disparity_masking;
             disparity.convertTo( disparity, CV_32F );
+                // Add railway mask on left frame
             disparity.copyTo( disparity_masking, railway_mask );
             reprojectImageTo3D( disparity_masking, points3D, Q, 3 ); 
+            //reprojectImageTo3D( disparity, points3D, Q, 3 ); 
             
                 // 3D point
             Cloud->Clear();
-            for ( size_t i = 0; i < points3D.total(); i ++ )
+            for ( int j = 0; j < points3D.rows; j++ )
             {
-                Vector3d temPoint, tempColor;
-                temPoint << double( points3D.at< Vec3f >( static_cast<int>(i) )[0] ),
-                            double( points3D.at< Vec3f >( static_cast<int>(i) )[1] ),
-                            double( points3D.at< Vec3f >( static_cast<int>(i) )[2] );
-                tempColor.x() = double( imgRemap[0].at< Vec3b >(int(i)).val[2] / 255.0 );
-                tempColor.y() = double( imgRemap[0].at< Vec3b >(int(i)).val[1] / 255.0 );
-                tempColor.z() = double( imgRemap[0].at< Vec3b >(int(i)).val[0] / 255.0 );
-                Cloud->points_.push_back( temPoint );
-                Cloud->colors_.push_back( tempColor );
+                for ( int i = 0; i < points3D.cols-10; i++ )
+                {
+            Vector3d temPoint, tempColor;
+            temPoint << double( points3D.at< Vec3f >( j, i )[0] ),
+                        double( points3D.at< Vec3f >( j, i )[1] ),
+                        double( points3D.at< Vec3f >( j, i )[2] );
+//            tempColor.x() = (railway_mask.at<uchar>(int(i)) > 15) ? 1.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[2] / 255.0 );
+//            tempColor.y() = (railway_mask.at<uchar>(int(i)) > 15) ? 0.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[1] / 255.0 );
+//            tempColor.z() = (railway_mask.at<uchar>(int(i)) > 15) ? 0.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[0] / 255.0 );
+            tempColor.x() = double( imgRemap[0].at< Vec3b >( j, i ).val[2] / 255.0 );
+            tempColor.y() = double( imgRemap[0].at< Vec3b >( j, i ).val[1] / 255.0 );
+            tempColor.z() = double( imgRemap[0].at< Vec3b >( j, i ).val[0] / 255.0 );
+            Cloud->points_.push_back( temPoint );
+            Cloud->colors_.push_back( tempColor );
+                }
             }
             waitKey(50);
             
+                // View 3D
+//            vis.UpdateGeometry();
+////            vis.PollEvents();
+//            vis.Run();
+            click = waitKey(0);
+        }
+        if ( click == 'v' || click == 'V' ) 
+        {
+            view = true;
             vis.UpdateGeometry();
             //vis.PollEvents();
             vis.Run();
-            click = waitKey(0);
         }
-        if ( click == 'v' || click == 'V' ) view = true;
         else if ( click == 27 || click == 'q' || click == 'Q' ) break;                                // Interrupt the cycle, press "ESC"
         
     }
