@@ -254,11 +254,11 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     visualization::Visualizer vis;
     vis.CreateVisualizerWindow( "Open3D_odometry", 1600, 900, 50, 50 );
         // Add Coordinate
-    auto coord = geometry::TriangleMesh::CreateCoordinateFrame( 1.0, Vector3d( 0.0, 0.0, 0.0 ) );
+    auto coord = geometry::TriangleMesh::CreateCoordinateFrame( 0.5, Vector3d( 0.0, 0.0, 0.0 ) );
     coord->ComputeVertexNormals();
     vis.AddGeometry( coord );
         // Grid
-    PaintGrid( vis, 150.0, 1.0 );
+    //PaintGrid( vis, 150.0, 1.0 );
         // Add Lidar
     vis.AddGeometry( Cloud );
     
@@ -287,7 +287,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             tts = zcm_msg.service.u_timestamp;
             last_left_ts = tts;
             cout << " --- L:\t" << last_left_ts << endl;
-            imshow( "imgL", imgTemp );
+            //imshow( "imgL", imgTemp );
             click = waitKey(50);
             
             Lflag = true;
@@ -338,7 +338,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             cv::inRange(railway_mask, 15, 255, railway_mask);
                 // Boundary points of Red & yellow zones with step 10 vertically
             center_line.clear();
-            //center_line.push_back({});
+            vector< Point2d > img_point_line;
             for (int y = 0; y < railway_mask.rows; y += 1)
             {
                 int min_x = railway_mask.cols;
@@ -346,8 +346,10 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
                 
                 for (int x = 10; x < railway_mask.cols-10; x++ )
                 {
+                    if ((y < 180) || (y > railway_mask.rows - 400)) railway_mask.at< uint8_t >(y, x) = 0;
                     if (railway_mask.at< uint8_t >(y, x) > 15)
                     {
+                        img_point_line.push_back( {double(x), double(y)} );
                         if (min_x > x)  min_x = x;
                         if (max_x < x) max_x = x;
                     }
@@ -360,11 +362,30 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             }
             Mat imgTemp;
             railway_mask.copyTo( imgTemp );
+                // Center mask points 
             cvtColor( imgTemp, imgTemp, cv::COLOR_GRAY2BGR );
             for ( size_t i = 0; i < center_line.size(); i++ )
-            {
                 imgTemp.at< Vec3b >(center_line.at(i)) = Vec3b(0, 0, 255);
-            }
+                // Center mask line
+            Vec4f img_center_line;
+            fitLine( img_point_line, img_center_line, cv::DIST_L2, 0, 0.01, 0.01 );
+            cv::line( imgTemp, 
+                      {cvRound(img_center_line[0]), cvRound(img_center_line[1])}, 
+                      {cvRound(img_center_line[2]), cvRound(img_center_line[3])}, 
+                      cv::Scalar(0, 0, 255), 3, LINE_8, 0 );
+            cout << "Line2D: " << img_center_line << endl;
+                // ... and the long enough line to cross the whole image
+            float d = sqrt(img_center_line[0] * img_center_line[0] + img_center_line[1] * img_center_line[1]);
+            img_center_line[0] /= d;
+            img_center_line[1] /= d;
+            float t = float(imgL.cols + imgL.rows);
+            cv::Point pt1, pt2;
+            pt1.x = cvRound(img_center_line[2] - img_center_line[0] * t);
+            pt1.y = cvRound(img_center_line[3] - img_center_line[1] * t);
+            pt2.x = cvRound(img_center_line[2] + img_center_line[0] * t);
+            pt2.y = cvRound(img_center_line[3] + img_center_line[1] * t);
+            cout << "Line2D: " << pt1 << " : " << pt2 << endl;
+            cv::line( imgTemp, pt1, pt2, cv::Scalar(0, 255, 0), 3, LINE_8, 0 );
             resize( imgTemp, imgTemp, binning_size, 0, 0, cv::INTER_LINEAR );
             
             tts = zcm_msg.service.u_timestamp;
@@ -456,27 +477,71 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             
                 // 3D point
             Cloud->Clear();
+            vector< Point3d > points_line;
             for ( int j = 0; j < points3D.rows; j++ )
             {
                 for ( int i = 0; i < points3D.cols-10; i++ )
                 {
-            Vector3d temPoint, tempColor;
-            temPoint << double( points3D.at< Vec3f >( j, i )[0] ),
-                        double( points3D.at< Vec3f >( j, i )[1] ),
-                        double( points3D.at< Vec3f >( j, i )[2] );
-//            tempColor.x() = (railway_mask.at<uchar>(int(i)) > 15) ? 1.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[2] / 255.0 );
-//            tempColor.y() = (railway_mask.at<uchar>(int(i)) > 15) ? 0.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[1] / 255.0 );
-//            tempColor.z() = (railway_mask.at<uchar>(int(i)) > 15) ? 0.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[0] / 255.0 );
-            tempColor.x() = double( imgRemap[0].at< Vec3b >( j, i ).val[2] / 255.0 );
-            tempColor.y() = double( imgRemap[0].at< Vec3b >( j, i ).val[1] / 255.0 );
-            tempColor.z() = double( imgRemap[0].at< Vec3b >( j, i ).val[0] / 255.0 );
-            Cloud->points_.push_back( temPoint );
-            Cloud->colors_.push_back( tempColor );
+                    if ( railway_mask.at<uchar>( j, i ) && 
+                         (points3D.at< Vec3f >( j, i )[0] > 0) && 
+                         (points3D.at< Vec3f >( j, i )[1] > 0) && 
+                         (points3D.at< Vec3f >( j, i )[2] > 0) ) 
+                    {
+                        points_line.push_back( { double( points3D.at< Vec3f >( j, i )[0] ),
+                                                 double( points3D.at< Vec3f >( j, i )[1] ),
+                                                 double( points3D.at< Vec3f >( j, i )[2] ) } );
+                    }
+                            
+                    Vector3d temPoint, tempColor;
+                    temPoint << double( points3D.at< Vec3f >( j, i )[0] ),
+                                double( points3D.at< Vec3f >( j, i )[1] ),
+                                double( points3D.at< Vec3f >( j, i )[2] );
+//                    tempColor.x() = (railway_mask.at<uchar>(int(i)) > 15) ? 1.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[2] / 255.0 );
+//                    tempColor.y() = (railway_mask.at<uchar>(int(i)) > 15) ? 0.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[1] / 255.0 );
+//                    tempColor.z() = (railway_mask.at<uchar>(int(i)) > 15) ? 0.0 : double( imgRemap[0].at< Vec3b >(int(i)).val[0] / 255.0 );
+                    tempColor.x() = double( imgRemap[0].at< Vec3b >( j, i ).val[2] / 255.0 );
+                    tempColor.y() = double( imgRemap[0].at< Vec3b >( j, i ).val[1] / 255.0 );
+                    tempColor.z() = double( imgRemap[0].at< Vec3b >( j, i ).val[0] / 255.0 );
+                    Cloud->points_.push_back( temPoint );
+                    Cloud->colors_.push_back( tempColor );
                 }
             }
+            
+                // Get line
+            Vec6d center_line_3D;
+            fitLine( points_line, center_line_3D, cv::DIST_WELSCH, 0, 0.01, 0.01 );
+            cout << "Line3D: " << center_line_3D << endl;
+            shared_ptr< geometry::LineSet > line_3D = make_shared< geometry::LineSet >();
+                // Points of center line
+            double d = sqrt( center_line_3D[0] * center_line_3D[0] + center_line_3D[1] * center_line_3D[1] + center_line_3D[2] * center_line_3D[2] );
+            center_line[0] /= d;
+            center_line[1] /= d;
+            center_line[2] /= d;
+            line_3D->points_.push_back( {center_line_3D[0], center_line_3D[1], center_line_3D[2]} );
+            line_3D->points_.push_back( {center_line_3D[3], center_line_3D[4], center_line_3D[5]} );
+            double t1 = 60.0, t2 = 3.0;
+            cv::Point3d pt1, pt2;
+            pt1.x = center_line_3D[3] - center_line_3D[0] * t1;
+            pt1.y = center_line_3D[4] - center_line_3D[1] * t1;
+            pt1.z = center_line_3D[5] - center_line_3D[2] * t1;
+            pt2.x = center_line_3D[3] + center_line_3D[0] * t2;
+            pt2.y = center_line_3D[4] + center_line_3D[1] * t2;
+            pt2.z = center_line_3D[5] + center_line_3D[2] * t2;
+            cout << "Line3D: " << pt1 << " : " << pt2 << endl;
+            line_3D->points_.push_back( {pt1.x, pt1.y, pt1.z} );
+            line_3D->points_.push_back( {pt2.x, pt2.y, pt2.z} );
+            line_3D->points_.push_back( {0.0, 0.0, 0.0} );
+            line_3D->lines_.push_back( Vector2i(4, 0) );
+            line_3D->lines_.push_back( Vector2i(4, 1) );
+            line_3D->lines_.push_back( Vector2i(2, 3) );
+            line_3D->colors_.push_back( Vector3d(1.0, 0.0, 0.0) );            
+            line_3D->colors_.push_back( Vector3d(0.0, 0.0, 1.0) );
+            line_3D->colors_.push_back( Vector3d(0.0, 1.0, 0.0) );
+            vis.AddGeometry( line_3D );
+            
             waitKey(50);
             
-                // View 3D
+                // View 3D!
 //            vis.UpdateGeometry();
 ////            vis.PollEvents();
 //            vis.Run();
