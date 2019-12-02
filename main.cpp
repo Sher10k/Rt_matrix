@@ -1,5 +1,6 @@
 #include "Header/handler_Rt.h"
 #include <QCoreApplication>
+#include <QtDataVisualization>
 
 #include <iostream>
 #include <vector>
@@ -15,6 +16,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/calib3d.hpp>
+#include <opencv2/core/eigen.hpp>
 
 // Eigen
 #include <Eigen/Eigen>
@@ -45,12 +47,34 @@ using namespace cv;
 using namespace Eigen;
 using namespace zcm;
 using namespace open3d;
+using namespace QtDataVisualization;
 
 #define DEBUG
 
 void PaintGrid( visualization::Visualizer &vis, double Gsize, double Gstep )
 {
-    double R = 0.005, H = Gsize;
+    shared_ptr< geometry::LineSet > grid_lines = make_shared< geometry::LineSet >();
+    int index = 0;
+        // XoY
+    for ( double i = -Gsize; i <= Gsize; i += Gstep )
+    {
+        grid_lines->points_.push_back( { i, Gsize, 0.0 } );
+        grid_lines->points_.push_back( { i, -Gsize, 0.0 } );
+        grid_lines->lines_.push_back( { index, index + 1 } );
+        if ( i == 0.0 ) grid_lines->colors_.push_back( { 0.0, 1.0, 0.0 } );
+        else grid_lines->colors_.push_back( { 0.6, 0.6, 0.6 } );
+        index += 2;
+        
+        grid_lines->points_.push_back( { Gsize, i, 0.0 } );
+        grid_lines->points_.push_back( { -Gsize, i, 0.0 } );
+        grid_lines->lines_.push_back( { index, index + 1 } );
+        if ( i == 0.0 ) grid_lines->colors_.push_back( { 1.0, 0.0, 0.0 } );
+        else grid_lines->colors_.push_back( { 0.6, 0.6, 0.6 } );
+        index += 2;
+    }
+    vis.AddGeometry( grid_lines );
+    
+  /*  double R = 0.005, H = Gsize;
     int resolution = 3, split = 2;
     for ( double i = 0; i <= Gsize; i += Gstep )
     {
@@ -98,7 +122,7 @@ void PaintGrid( visualization::Visualizer &vis, double Gsize, double Gstep )
         plane4->Transform( Rt );
         plane4->ComputeVertexNormals();
         vis.AddGeometry( plane4 );
-    }
+    }*/
 }
 
 int main(int argc, const char* const argv[])  // int argc, char *argv[]
@@ -254,11 +278,18 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
     visualization::Visualizer vis;
     vis.CreateVisualizerWindow( "Open3D_odometry", 1600, 900, 50, 50 );
         // Add Coordinate
-    auto coord = geometry::TriangleMesh::CreateCoordinateFrame( 0.5, Vector3d( 0.0, 0.0, 0.0 ) );
+    auto coord = geometry::TriangleMesh::CreateCoordinateFrame( 1.0, Vector3d( 0.0, 0.0, 0.0 ) );
     coord->ComputeVertexNormals();
     vis.AddGeometry( coord );
+        // Add Coordinate camera
+    auto coord_cam_L = geometry::TriangleMesh::CreateCoordinateFrame( 0.3, Vector3d( 0.0, 0.0, 0.0 ) );
+    auto coord_cam_R = geometry::TriangleMesh::CreateCoordinateFrame( 0.3, Vector3d( 0.0, 0.0, 0.0 ) );
+    coord_cam_L->ComputeVertexNormals();
+    coord_cam_R->ComputeVertexNormals();
+    vis.AddGeometry( coord_cam_L );
+    vis.AddGeometry( coord_cam_R );
         // Grid
-    //PaintGrid( vis, 150.0, 1.0 );
+    PaintGrid( vis, 100.0, 1.0 );
         // Add Lidar
     vis.AddGeometry( Cloud );
     
@@ -287,7 +318,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             tts = zcm_msg.service.u_timestamp;
             last_left_ts = tts;
             cout << " --- L:\t" << last_left_ts << endl;
-            //imshow( "imgL", imgTemp );
+            imshow( "imgL", imgTemp );
             click = waitKey(50);
             
             Lflag = true;
@@ -311,7 +342,7 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             tts = zcm_msg.service.u_timestamp;
             last_right_ts = tts;
             cout << " --- R:\t" << last_right_ts << endl;
-            imshow( "imgR", imgTemp );
+            //imshow( "imgR", imgTemp );
             click = waitKey(30);
             
             Rflag = true;
@@ -466,14 +497,15 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             cv::applyColorMap( disparity_viz, disparity_viz, cv::COLORMAP_HSV );
             resize( disparity_viz, disparity_viz, binning_size, 0, 0, cv::INTER_LINEAR );
             cv::imshow("disp", disparity_viz);
+            waitKey(50);
             
                 // 3D points with mask
             Mat points3D, disparity_masking;
             disparity.convertTo( disparity, CV_32F );
                 // Add railway mask on left frame
             disparity.copyTo( disparity_masking, railway_mask );
-            reprojectImageTo3D( disparity_masking, points3D, Q, 3 ); 
-            //reprojectImageTo3D( disparity, points3D, Q, 3 ); 
+            //reprojectImageTo3D( disparity_masking, points3D, Q, 3 ); 
+            reprojectImageTo3D( disparity, points3D, Q, 3 ); 
             
                 // 3D point
             Cloud->Clear();
@@ -483,9 +515,9 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
                 for ( int i = 0; i < points3D.cols-10; i++ )
                 {
                     if ( railway_mask.at<uchar>( j, i ) && 
-                         (points3D.at< Vec3f >( j, i )[0] > 0) && 
-                         (points3D.at< Vec3f >( j, i )[1] > 0) && 
-                         (points3D.at< Vec3f >( j, i )[2] > 0) ) 
+                        (points3D.at< Vec3f >( j, i )[0] > 0) && 
+                        (points3D.at< Vec3f >( j, i )[1] > 0) && 
+                        (points3D.at< Vec3f >( j, i )[2] > 0) ) 
                     {
                         points_line.push_back( { double( points3D.at< Vec3f >( j, i )[0] ),
                                                  double( points3D.at< Vec3f >( j, i )[1] ),
@@ -510,13 +542,14 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
                 // Get line
             Vec6d center_line_3D;
             fitLine( points_line, center_line_3D, cv::DIST_WELSCH, 0, 0.01, 0.01 );
-            cout << "Line3D: " << center_line_3D << endl;
+            //cout << "Line3D: " << center_line_3D << endl;
             shared_ptr< geometry::LineSet > line_3D = make_shared< geometry::LineSet >();
                 // Points of center line
             double d = sqrt( center_line_3D[0] * center_line_3D[0] + center_line_3D[1] * center_line_3D[1] + center_line_3D[2] * center_line_3D[2] );
-            center_line[0] /= d;
-            center_line[1] /= d;
-            center_line[2] /= d;
+            center_line_3D[0] /= d;
+            center_line_3D[1] /= d;
+            center_line_3D[2] /= d;
+            cout << "Line3D: " << center_line_3D << endl;
             line_3D->points_.push_back( {center_line_3D[0], center_line_3D[1], center_line_3D[2]} );
             line_3D->points_.push_back( {center_line_3D[3], center_line_3D[4], center_line_3D[5]} );
             double t1 = 60.0, t2 = 3.0;
@@ -538,6 +571,83 @@ int main(int argc, const char* const argv[])  // int argc, char *argv[]
             line_3D->colors_.push_back( Vector3d(0.0, 0.0, 1.0) );
             line_3D->colors_.push_back( Vector3d(0.0, 1.0, 0.0) );
             vis.AddGeometry( line_3D );
+            
+                // angle rotete around oXY
+            double phx = acos( center_line_3D[2] / sqrt( center_line_3D[1] * center_line_3D[1] + 
+                                                         center_line_3D[2] * center_line_3D[2] ) );
+            if( phx > CV_PI/2 ) phx = phx - CV_PI;
+            else phx = -phx;
+            double phy = acos( center_line_3D[2] / sqrt( center_line_3D[0] * center_line_3D[0] + 
+                                                         center_line_3D[2] * center_line_3D[2] ) );
+            if( phy > CV_PI/2 ) phy = phy - CV_PI;
+            else phy = -phy;
+            
+            Matrix4d Rtx, Rty;
+            Rtx << 1.0, 0.0,      0.0,       0.0,
+                   0.0, cos(phx), -sin(phx), 0.0,
+                   0.0, sin(phx), cos(phx),  0.0,
+                   0.0, 0.0,      0.0,       1.0;
+            Rty << cos(phy),  0.0, sin(phy), 0.0,
+                   0.0,       1.0, 0.0,      0.0,
+                   -sin(phy), 0.0, cos(phy), 0.0,
+                   0.0,       0.0, 0.0,      1.0;
+            
+            Cloud->Transform( Rtx * Rty );
+            line_3D->Transform( Rtx * Rty );
+            coord_cam_L->Transform( Rtx * Rty );
+            coord_cam_R->Transform( Rtx * Rty );
+            
+//            Mat K_R, R_R, t_R;
+//            decomposeProjectionMatrix( projectR, K_R, R_R, t_R );
+//            Matrix3d R_eigen;
+//            Matrix< double, 4, 1 > t_eigen;
+//            cv2eigen( R_R, R_eigen );
+//            cv2eigen( t_R, t_eigen );
+//            cout << "R_R: " << R_R << endl;
+//            cout << "t_R: " << t_R << endl;
+//            cout << "R_eigen: " << R_eigen << endl;
+//            cout << "t_eigen: " << t_eigen << endl;
+//            Matrix4d Rt_Rcam;
+//            Mat Q_inv = Q.inv();
+//            cv2eigen( Q_inv, Rt_Rcam );
+//            cout << "Q: " << Q << endl;
+//            cout << "Q_inv: " << Q_inv << endl;
+//            cout << "Rt_Rcam: " << Rt_Rcam << endl;
+            //Rt_Rcam << R_eigen(0, 0) << R_eigen(0, 1) << R_eigen(0, 2) << R_eigen(0, 1);
+            //coord_cam_R->Transform( Rt_Rcam );
+            
+                // Rotate for global coordinate
+            Matrix4d Th, Rz90, Ry_90, ThRzRy;
+            Th << 1, 0, 0, 0,
+                  0, 1, 0, line_3D->points_.at(1).x(),
+                  0, 0, 1, line_3D->points_.at(1).y(),   // h - ground height
+                  0, 0, 0, 1;
+            Rz90 << 0,  1, 0, 0,   // cos(90 * CV_PI / 180) sin(90 * CV_PI / 180)
+                    -1, 0, 0, 0,   // sin(90 * CV_PI / 180) cos(90 * CV_PI / 180)  
+                    0,  0, 1, 0,
+                    0,  0, 0, 1;
+            Ry_90 << 0,  0, 1, 0,   // cos(-90 * CV_PI / 180) -sin(-90 * CV_PI / 180)
+                     0,  1, 0, 0,
+                     -1, 0, 0, 0,    // sin(-90 * CV_PI / 180) cos(-90 * CV_PI / 180) 
+                     0,  0, 0, 1;
+            ThRzRy = Th * Ry_90 * Rz90;    //  * Ry_90 * Rz90
+            
+            Cloud->Transform( ThRzRy );
+            line_3D->Transform( ThRzRy );
+            coord_cam_L->Transform( ThRzRy );
+            coord_cam_R->Transform( ThRzRy );
+//            cout << "Line3D: " << line_3D->points_.at(0) << endl;
+//            cout << "Line3D_l: " << line_3D->points_.at(1) << endl;
+            
+            Matrix4d Rt_result;
+            Mat Rt_result_cv;
+            Rt_result = Rtx * Rty * Th * Ry_90 * Rz90;
+            eigen2cv(Rt_result, Rt_result_cv);
+            cout << "Rt_result: " << Rt_result_cv << endl;
+            cv::FileStorage Rt;
+            Rt.open("../Rt_matrix/cfg/Rt_result.txt", cv::FileStorage::WRITE);
+            Rt << "Rt_global" << Rt_result_cv;
+            Rt.release();
             
             waitKey(50);
             
